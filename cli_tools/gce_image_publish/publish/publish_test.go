@@ -23,6 +23,7 @@ import (
 	"github.com/GoogleCloudPlatform/compute-image-tools/daisy"
 	"github.com/kylelemons/godebug/pretty"
 	computeAlpha "google.golang.org/api/compute/v0.alpha"
+	"google.golang.org/api/compute/v1"
 )
 
 func TestPublishImage(t *testing.T) {
@@ -605,6 +606,7 @@ func TestDeprecatePrintOut(t *testing.T) {
 		{"only un-deprecated", &daisy.DeprecateImages{&daisy.DeprecateImage{Image: "foo", DeprecationStatusAlpha: computeAlpha.DeprecationStatus{State: ""}}}, nil, nil, []string{"foo"}},
 		{"all three", &daisy.DeprecateImages{
 			&daisy.DeprecateImage{Image: "foo", DeprecationStatusAlpha: computeAlpha.DeprecationStatus{State: "DEPRECATED"}},
+			&daisy.DeprecateImage{Image: "bar", DeprecationStatusAlpha: computeAlpha.DeprecationStatus{State: "OBSOLETE"}},
 			&daisy.DeprecateImage{Image: "baz", DeprecationStatusAlpha: computeAlpha.DeprecationStatus{State: ""}}},
 			[]string{"foo"}, []string{"bar"}, []string{"baz"},
 		},
@@ -622,6 +624,62 @@ func TestDeprecatePrintOut(t *testing.T) {
 			if !reflect.DeepEqual(p.toUndeprecate, tt.toUndeprecate) {
 				t.Errorf("deprecatePrintOut() got2 = %v, want %v", p.toUndeprecate, tt.toUndeprecate)
 			}
+		})
+	}
+}
+
+func TestCreateRollOut(t *testing.T) {
+	startTime := time.Now()
+	tests := []struct {
+		desc string
+		zones []*compute.Zone
+		rolloutStartTime time.Time
+		rolloutRate int
+		wantZones []string
+	}{
+		{
+			desc: "1 regions, 3 zones with a rollout rate of 5 minutes.",
+			zones: []*compute.Zone{
+				&compute.Zone{
+					Name:                  "us-central2-a",
+					Region:                "https://www.googleapis.com/compute/v1/projects/projectname/regions/us-central2",
+				},
+				&compute.Zone{
+					Name:                  "us-central2-b",
+					Region:                "https://www.googleapis.com/compute/v1/projects/projectname/regions/us-central2",
+				},
+				&compute.Zone{
+					Name:                  "us-central2-c",
+					Region:                "https://www.googleapis.com/compute/v1/projects/projectname/regions/us-central2",
+				},
+			},
+			rolloutStartTime:  startTime,
+			rolloutRate:       5,
+			wantZones: []string{"zones/us-central2-a","zones/us-central2-b","zones/us-central2-c"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			rollout := createRollOut(tt.zones,tt.rolloutStartTime, tt.rolloutRate)
+
+			if rollout.DefaultRolloutTime != tt.rolloutStartTime.Format(time.RFC3339) {
+				t.Errorf("createRollOut() DefaultRolloutTime got = %v, want %v", rollout.DefaultRolloutTime, tt.rolloutStartTime.Format(time.RFC3339))
+			}
+
+			//Verify interval
+			intervalCounter := 0
+			for k, v := range rollout.LocationRolloutPolicies {
+				intervalCounter++
+				numMinutes := intervalCounter * tt.rolloutRate
+				parsedTime, err := time.Parse(time.RFC3339, v)
+				if err != nil {
+					t.Errorf("failed to parse time, got = %v, err = %v", v, err)
+				}
+				if parsedTime != tt.rolloutStartTime.Add(time.Minute * numMinutes) {
+
+				}
+			}
+
 		})
 	}
 }

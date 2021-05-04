@@ -49,7 +49,7 @@ var (
 	noConfirm      = flag.Bool("skip_confirmation", false, "don't ask for confirmation")
 	ce             = flag.String("compute_endpoint_override", "", "API endpoint to override default, will override ComputeEndpoint in template")
 	filter         = flag.String("filter", "", "regular expression to filter images to publish by prefixes")
-	rolloutRate 	 = flag.String("rollout_rate","60", "The number of minutes between the image rolling out between zones. 0 minutes will not use a rollout policy.")
+	rolloutRate 	 = flag.Int("rollout_rate",60, "The number of minutes between the image rolling out between zones. 0 minutes will not use a rollout policy.")
 )
 
 const (
@@ -112,6 +112,11 @@ func main() {
 		}
 	})
 
+	if *rolloutRate < 0 {
+		fmt.Println("-rollout_rate cannot be less than 0.")
+		os.Exit(1)
+	}
+
 	if *skipDup && *replace {
 		fmt.Println("Cannot set both -skip_duplicates and -replace")
 		os.Exit(1)
@@ -145,7 +150,7 @@ func main() {
 			errs = append(errs, loadErr)
 			continue
 		}
-		w, err := p.CreateWorkflows(ctx, varMap, regex, *rollback, *skipDup, *replace, *noRoot, *oauth)
+		w, err := p.CreateWorkflows(ctx, varMap, regex, *rollback, *skipDup, *replace, *noRoot, *oauth, time.Now(), *rolloutRate)
 		if err != nil {
 			createWorkflowErr := fmt.Errorf("Workflow creation error: %s", err)
 			fmt.Println(createWorkflowErr)

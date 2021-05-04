@@ -28,6 +28,7 @@ require (
 	github.com/minio/highwayhash v1.0.1
 	github.com/stretchr/testify v1.6.1
 	github.com/vmware/govmomi v0.24.0
+	github.com/yanatan16/itertools v0.0.0-20160513161737-afd1891e0c4f
 	go.chromium.org/luci v0.0.0-20210204234011-34a994fe5aec // indirect
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
