@@ -58,29 +58,50 @@ func TestPublishImage(t *testing.T) {
 	}{
 		{
 			desc: "normal case",
-			p: &Publish{SourceProject: "bar-project", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
+			p:    &Publish{SourceProject: "bar-project", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
 			img: &Image{
-				Prefix: "foo",
-				Family: "foo-family",
+				Prefix:          "foo",
+				Family:          "foo-family",
 				GuestOsFeatures: []string{"foo-feature", "bar-feature"},
-				ObsoleteDate: &now,
+				ObsoleteDate:    &now,
+				RolloutPolicy: &computeAlpha.RolloutPolicy{
+					DefaultRolloutTime: now.Format(time.RFC3339),
+				},
 			},
 			pubImgs: []*computeAlpha.Image{
 				{Name: "bar-2", Family: "bar-family"},
 				{Name: "foo-2", Family: "foo-family"},
 				{
-					Name: "foo-1",
+					Name:   "foo-1",
 					Family: "foo-family",
-					Deprecated: &computeAlpha.DeprecationStatus{State: "DEPRECATED"},
+					Deprecated: &computeAlpha.DeprecationStatus{
+						State: "DEPRECATED",
+						StateOverride: &computeAlpha.RolloutPolicy{
+							DefaultRolloutTime: now.Format(time.RFC3339),
+						},
+					},
 				},
-				{Name: "bar-1", Family: "bar-family", Deprecated: &computeAlpha.DeprecationStatus{State: "DEPRECATED"}},
+				{
+					Name:   "bar-1",
+					Family: "bar-family",
+					Deprecated: &computeAlpha.DeprecationStatus{
+						State: "DEPRECATED",
+						StateOverride: &computeAlpha.RolloutPolicy{
+							DefaultRolloutTime: now.Format(time.RFC3339),
+						},
+					},
+				},
 			},
 			wantCI: &daisy.CreateImages{
 				ImagesAlpha: []*daisy.ImageAlpha{
 					{
 						ImageBase: daisy.ImageBase{Resource: daisy.Resource{Project: "foo-project", NoCleanup: true, RealName: "foo-3"}},
 						Image: computeAlpha.Image{
-							Name: "foo-3", Family: "foo-family", SourceImage: "projects/bar-project/global/images/foo-3",
+							Name: "foo-3", Family: "foo-family",
+							SourceImage: "projects/bar-project/global/images/foo-3",
+							RolloutOverride: &computeAlpha.RolloutPolicy{
+								DefaultRolloutTime: now.Format(time.RFC3339),
+							},
 							Deprecated: &computeAlpha.DeprecationStatus{
 								State:    "ACTIVE",
 								Obsolete: now.Format(time.RFC3339),
@@ -98,7 +119,7 @@ func TestPublishImage(t *testing.T) {
 						State:       "DEPRECATED",
 						Replacement: "https://www.googleapis.com/compute/v1/projects/foo-project/global/images/foo-3",
 						StateOverride: &computeAlpha.RolloutPolicy{
-							DefaultRolloutTime: now.Format("RFC3339"),
+							DefaultRolloutTime: now.Format(time.RFC3339),
 						},
 					},
 				},
@@ -106,8 +127,14 @@ func TestPublishImage(t *testing.T) {
 		},
 		{
 			desc: "multiple images to deprecate",
-			p: &Publish{SourceProject: "bar-project", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
-			img: &Image{Prefix: "foo", Family: "foo-family"},
+			p:    &Publish{SourceProject: "bar-project", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
+			img: &Image{
+				Prefix: "foo",
+				Family: "foo-family",
+				RolloutPolicy: &computeAlpha.RolloutPolicy{
+					DefaultRolloutTime: now.Format(time.RFC3339),
+				},
+			},
 			pubImgs: []*computeAlpha.Image{
 				{Name: "bar-2", Family: "bar-family"},
 				{Name: "foo-2", Family: "foo-family"},
@@ -118,33 +145,46 @@ func TestPublishImage(t *testing.T) {
 				ImagesAlpha: []*daisy.ImageAlpha{
 					{
 						ImageBase: daisy.ImageBase{Resource: daisy.Resource{Project: "foo-project", NoCleanup: true, RealName: "foo-3"}},
-						Image: computeAlpha.Image{Name: "foo-3", Family: "foo-family", SourceImage: "projects/bar-project/global/images/foo-3"},
+						Image: computeAlpha.Image{
+							Name:        "foo-3",
+							Family:      "foo-family",
+							SourceImage: "projects/bar-project/global/images/foo-3",
+							RolloutOverride: &computeAlpha.RolloutPolicy{
+								DefaultRolloutTime: now.Format(time.RFC3339),
+							},
+						},
 					},
 				},
 			},
 			wantDI: &daisy.DeprecateImages{
 				{
-					Image: "foo-2",
+					Image:   "foo-2",
 					Project: "foo-project",
 					DeprecationStatusAlpha: computeAlpha.DeprecationStatus{
-						State: "DEPRECATED",
+						State:       "DEPRECATED",
 						Replacement: "https://www.googleapis.com/compute/v1/projects/foo-project/global/images/foo-3",
+						StateOverride: &computeAlpha.RolloutPolicy{
+							DefaultRolloutTime: now.Format(time.RFC3339),
+						},
 					},
 				},
 				{
-					Image: "foo-1",
+					Image:   "foo-1",
 					Project: "foo-project",
 					DeprecationStatusAlpha: computeAlpha.DeprecationStatus{
-						State: "DEPRECATED",
+						State:       "DEPRECATED",
 						Replacement: "https://www.googleapis.com/compute/v1/projects/foo-project/global/images/foo-3",
+						StateOverride: &computeAlpha.RolloutPolicy{
+							DefaultRolloutTime: now.Format(time.RFC3339),
+						},
 					},
 				},
 			},
 		},
 		{
-			desc: "GCSPath case",
-			p: &Publish{SourceGCSPath: "gs://bar-project-path", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
-			img: &Image{Prefix: "foo", Family: "foo-family"},
+			desc:    "GCSPath case",
+			p:       &Publish{SourceGCSPath: "gs://bar-project-path", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
+			img:     &Image{Prefix: "foo", Family: "foo-family"},
 			pubImgs: []*computeAlpha.Image{},
 			wantCI: &daisy.CreateImages{
 				ImagesAlpha: []*daisy.ImageAlpha{
@@ -160,18 +200,18 @@ func TestPublishImage(t *testing.T) {
 			},
 		},
 		{
-			desc: "GCSPath with noRoot case",
-			p: &Publish{SourceGCSPath: "gs://bar-project-path", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
-			img: &Image{Prefix: "foo", Family: "foo-family"},
+			desc:    "GCSPath with noRoot case",
+			p:       &Publish{SourceGCSPath: "gs://bar-project-path", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
+			img:     &Image{Prefix: "foo", Family: "foo-family"},
 			pubImgs: []*computeAlpha.Image{},
-			noRoot: true,
+			noRoot:  true,
 			wantCI: &daisy.CreateImages{
 				ImagesAlpha: []*daisy.ImageAlpha{
 					{
 						ImageBase: daisy.ImageBase{Resource: daisy.Resource{Project: "foo-project", NoCleanup: true, RealName: "foo-3"}},
 						Image: computeAlpha.Image{
-							Name: "foo-3",
-							Family: "foo-family",
+							Name:    "foo-3",
+							Family:  "foo-family",
 							RawDisk: &computeAlpha.ImageRawDisk{Source: "gs://bar-project-path/foo-3.tar.gz"},
 						},
 					},
@@ -179,30 +219,30 @@ func TestPublishImage(t *testing.T) {
 			},
 		},
 		{
-			desc: "both SourceGCSPath and SourceProject set",
-			p: &Publish{SourceGCSPath: "gs://bar-project-path", SourceProject: "bar-project"},
-			img: &Image{},
+			desc:    "both SourceGCSPath and SourceProject set",
+			p:       &Publish{SourceGCSPath: "gs://bar-project-path", SourceProject: "bar-project"},
+			img:     &Image{},
 			wantErr: true,
 		},
 		{
-			desc: "neither SourceGCSPath and SourceProject set",
-			p: &Publish{},
-			img: &Image{},
+			desc:    "neither SourceGCSPath and SourceProject set",
+			p:       &Publish{},
+			img:     &Image{},
 			wantErr: true,
 		},
 		{
-			desc: "image already exists",
-			p: &Publish{SourceProject: "bar-project", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
-			img: &Image{Prefix: "foo", Family: "foo-family", GuestOsFeatures: []string{"foo-feature"}},
+			desc:    "image already exists",
+			p:       &Publish{SourceProject: "bar-project", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
+			img:     &Image{Prefix: "foo", Family: "foo-family", GuestOsFeatures: []string{"foo-feature"}},
 			pubImgs: []*computeAlpha.Image{{Name: "foo-3", Family: "foo-family"}},
 			wantErr: true,
 		},
 		{
 			desc: "image already exists, skipDup set",
-			p: &Publish{SourceProject: "bar-project", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
+			p:    &Publish{SourceProject: "bar-project", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
 			img: &Image{
-				Prefix: "foo",
-				Family: "foo-family",
+				Prefix:          "foo",
+				Family:          "foo-family",
 				GuestOsFeatures: []string{"foo-feature"},
 			},
 			pubImgs: []*computeAlpha.Image{
@@ -214,7 +254,7 @@ func TestPublishImage(t *testing.T) {
 				{
 					Image: "foo-2", Project: "foo-project",
 					DeprecationStatusAlpha: computeAlpha.DeprecationStatus{
-						State: "DEPRECATED",
+						State:       "DEPRECATED",
 						Replacement: "https://www.googleapis.com/compute/v1/projects/foo-project/global/images/foo-3",
 					},
 				},
@@ -222,8 +262,14 @@ func TestPublishImage(t *testing.T) {
 		},
 		{
 			desc: "image already exists, replace set",
-			p: &Publish{SourceProject: "bar-project", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
-			img: &Image{Prefix: "foo", Family: "foo-family"},
+			p:    &Publish{SourceProject: "bar-project", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
+			img: &Image{
+				Prefix: "foo",
+				Family: "foo-family",
+				RolloutPolicy: &computeAlpha.RolloutPolicy{
+					DefaultRolloutTime: now.Format(time.RFC3339),
+				},
+			},
 			pubImgs: []*computeAlpha.Image{
 				{Name: "foo-3", Family: "bar-family"},
 				{Name: "foo-2", Family: "foo-family"},
@@ -234,28 +280,37 @@ func TestPublishImage(t *testing.T) {
 					{
 						ImageBase: daisy.ImageBase{
 							OverWrite: true,
-							Resource: daisy.Resource{Project: "foo-project", NoCleanup: true, RealName: "foo-3"},
+							Resource:  daisy.Resource{Project: "foo-project", NoCleanup: true, RealName: "foo-3"},
 						},
 						Image: computeAlpha.Image{
-							Name: "foo-3",
-							Family: "foo-family",
+							Name:        "foo-3",
+							Family:      "foo-family",
 							SourceImage: "projects/bar-project/global/images/foo-3",
+							RolloutOverride: &computeAlpha.RolloutPolicy{
+								DefaultRolloutTime: now.Format(time.RFC3339),
+							},
 						},
 					},
 				},
 			},
 			wantDI: &daisy.DeprecateImages{
 				{
-					Image: "foo-2",
+					Image:   "foo-2",
 					Project: "foo-project",
-					DeprecationStatusAlpha: computeAlpha.DeprecationStatus{State: "DEPRECATED", Replacement: "https://www.googleapis.com/compute/v1/projects/foo-project/global/images/foo-3"},
+					DeprecationStatusAlpha: computeAlpha.DeprecationStatus{
+						State:       "DEPRECATED",
+						Replacement: "https://www.googleapis.com/compute/v1/projects/foo-project/global/images/foo-3",
+						StateOverride: &computeAlpha.RolloutPolicy{
+							DefaultRolloutTime: now.Format(time.RFC3339),
+						},
+					},
 				},
 			},
 		},
 		{
 			desc: "new image from src, without version",
-			p: &Publish{SourceProject: "bar-project", PublishProject: "foo-project"},
-			img: &Image{Prefix: "foo-x", Family: "foo-family", GuestOsFeatures: []string{"foo-feature", "bar-feature"}},
+			p:    &Publish{SourceProject: "bar-project", PublishProject: "foo-project"},
+			img:  &Image{Prefix: "foo-x", Family: "foo-family", GuestOsFeatures: []string{"foo-feature", "bar-feature"}},
 			pubImgs: []*computeAlpha.Image{
 				{Name: "bar-x", Family: "bar-family"},
 			},
@@ -264,8 +319,8 @@ func TestPublishImage(t *testing.T) {
 					{
 						ImageBase: daisy.ImageBase{Resource: daisy.Resource{Project: "foo-project", NoCleanup: true, RealName: "foo-x"}},
 						Image: computeAlpha.Image{
-							Name: "foo-x",
-							Family: "foo-family",
+							Name:        "foo-x",
+							Family:      "foo-family",
 							SourceImage: "projects/bar-project/global/images/foo-x",
 						},
 						GuestOsFeatures: []string{"foo-feature", "bar-feature"}},
@@ -274,8 +329,8 @@ func TestPublishImage(t *testing.T) {
 		},
 		{
 			desc: "no image family, don't deprecate",
-			p: &Publish{SourceProject: "bar-project", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
-			img: &Image{Prefix: "foo", Family: "foo-family"},
+			p:    &Publish{SourceProject: "bar-project", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
+			img:  &Image{Prefix: "foo", Family: "foo-family"},
 			pubImgs: []*computeAlpha.Image{
 				{Name: "foo-2", Family: ""},
 				{Name: "foo-1", Family: "", Deprecated: &computeAlpha.DeprecationStatus{State: "DEPRECATED"}},
@@ -285,8 +340,8 @@ func TestPublishImage(t *testing.T) {
 					{
 						ImageBase: daisy.ImageBase{Resource: daisy.Resource{Project: "foo-project", NoCleanup: true, RealName: "foo-3"}},
 						Image: computeAlpha.Image{
-							Name: "foo-3",
-							Family: "foo-family",
+							Name:        "foo-3",
+							Family:      "foo-family",
 							SourceImage: "projects/bar-project/global/images/foo-3",
 						},
 					},
@@ -294,20 +349,20 @@ func TestPublishImage(t *testing.T) {
 			},
 		},
 		{
-			desc: "ignore license validation if forbidden",
-			p: &Publish{SourceProject: "bar-project", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
-			img: &Image{Prefix: "foo", Family: "foo-family", GuestOsFeatures: []string{"foo-feature"}, IgnoreLicenseValidationIfForbidden: true},
+			desc:    "ignore license validation if forbidden",
+			p:       &Publish{SourceProject: "bar-project", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
+			img:     &Image{Prefix: "foo", Family: "foo-family", GuestOsFeatures: []string{"foo-feature"}, IgnoreLicenseValidationIfForbidden: true},
 			pubImgs: []*computeAlpha.Image{},
 			wantCI: &daisy.CreateImages{
 				ImagesAlpha: []*daisy.ImageAlpha{
 					{
 						ImageBase: daisy.ImageBase{
-							Resource: daisy.Resource{Project: "foo-project", NoCleanup: true, RealName: "foo-3"},
+							Resource:                           daisy.Resource{Project: "foo-project", NoCleanup: true, RealName: "foo-3"},
 							IgnoreLicenseValidationIfForbidden: true,
 						},
 						Image: computeAlpha.Image{
-							Name: "foo-3",
-							Family: "foo-family",
+							Name:        "foo-3",
+							Family:      "foo-family",
 							SourceImage: "projects/bar-project/global/images/foo-3",
 						},
 						GuestOsFeatures: []string{"foo-feature"},
@@ -316,20 +371,20 @@ func TestPublishImage(t *testing.T) {
 			},
 		},
 		{
-			desc: "don't ignore license validation if forbidden",
-			p: &Publish{SourceProject: "bar-project", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
-			img: &Image{Prefix: "foo", Family: "foo-family", GuestOsFeatures: []string{"foo-feature"}, IgnoreLicenseValidationIfForbidden: false},
+			desc:    "don't ignore license validation if forbidden",
+			p:       &Publish{SourceProject: "bar-project", PublishProject: "foo-project", sourceVersion: "3", publishVersion: "3"},
+			img:     &Image{Prefix: "foo", Family: "foo-family", GuestOsFeatures: []string{"foo-feature"}, IgnoreLicenseValidationIfForbidden: false},
 			pubImgs: []*computeAlpha.Image{},
 			wantCI: &daisy.CreateImages{
 				ImagesAlpha: []*daisy.ImageAlpha{
 					{
 						ImageBase: daisy.ImageBase{
-							Resource: daisy.Resource{Project: "foo-project", NoCleanup: true, RealName: "foo-3"},
+							Resource:                           daisy.Resource{Project: "foo-project", NoCleanup: true, RealName: "foo-3"},
 							IgnoreLicenseValidationIfForbidden: false,
 						},
 						Image: computeAlpha.Image{
-							Name: "foo-3",
-							Family: "foo-family",
+							Name:        "foo-3",
+							Family:      "foo-family",
 							SourceImage: "projects/bar-project/global/images/foo-3",
 						},
 						GuestOsFeatures: []string{"foo-feature"},
@@ -338,18 +393,18 @@ func TestPublishImage(t *testing.T) {
 			},
 		},
 		{
-			desc: "new image from src, with ShieldedInstanceInitialState",
-			p: &Publish{SourceProject: "bar-project", PublishProject: "foo-project"},
-			img: &Image{Prefix: "foo-x", Family: "foo-family", ShieldedInstanceInitialState: fakeInitialState},
+			desc:    "new image from src, with ShieldedInstanceInitialState",
+			p:       &Publish{SourceProject: "bar-project", PublishProject: "foo-project"},
+			img:     &Image{Prefix: "foo-x", Family: "foo-family", ShieldedInstanceInitialState: fakeInitialState},
 			pubImgs: []*computeAlpha.Image{},
 			wantCI: &daisy.CreateImages{
 				ImagesAlpha: []*daisy.ImageAlpha{
 					{
 						ImageBase: daisy.ImageBase{Resource: daisy.Resource{Project: "foo-project", NoCleanup: true, RealName: "foo-x"}},
 						Image: computeAlpha.Image{
-							Name: "foo-x",
-							Family: "foo-family",
-							SourceImage: "projects/bar-project/global/images/foo-x",
+							Name:                         "foo-x",
+							Family:                       "foo-family",
+							SourceImage:                  "projects/bar-project/global/images/foo-x",
 							ShieldedInstanceInitialState: fakeInitialState,
 						},
 					},
@@ -401,7 +456,7 @@ func TestRollbackImage(t *testing.T) {
 				{Name: "bar-1", Family: "bar-family", Deprecated: &computeAlpha.DeprecationStatus{State: "DEPRECATED"}},
 			},
 			&daisy.DeleteResources{Images: []string{"projects/foo-project/global/images/foo-3"}},
-			&daisy.DeprecateImages{{Image: "foo-2", Project: "foo-project"}},
+			&daisy.DeprecateImages{{Image: "foo-2", Project: "foo-project", DeprecationStatusAlpha: computeAlpha.DeprecationStatus{State: "ACTIVE"}}},
 		},
 		{
 			"no image to undeprecate",
@@ -478,6 +533,7 @@ func TestPopulateSteps(t *testing.T) {
 }
 
 func TestPopulateWorkflow(t *testing.T) {
+	now := time.Now()
 	got := daisy.New()
 	p := &Publish{
 		SourceProject:  "foo-project",
@@ -488,6 +544,10 @@ func TestPopulateWorkflow(t *testing.T) {
 			{
 				Prefix: "test",
 				Family: "test-family",
+				RolloutPolicy: createRollOut([]*compute.Zone{
+					{Name: "us-central1-a", Region: "https://www.googleapis.com/compute/v1/projects/projectname/regions/us-central1"},
+					{Name: "us-central1-b", Region: "https://www.googleapis.com/compute/v1/projects/projectname/regions/us-central1"},
+				}, now, 1),
 			},
 		},
 	}
@@ -508,6 +568,11 @@ func TestPopulateWorkflow(t *testing.T) {
 	}
 	got.Cancel = nil
 
+	wantrp := computeAlpha.RolloutPolicy{DefaultRolloutTime: now.Format(time.RFC3339)}
+	wantrp.LocationRolloutPolicies = make(map[string]string)
+	wantrp.LocationRolloutPolicies["zones/us-central1-a"] = now.Format(time.RFC3339)
+	wantrp.LocationRolloutPolicies["zones/us-central1-b"] = now.Add(time.Minute).Format(time.RFC3339)
+
 	want := &daisy.Workflow{
 		Steps: map[string]*daisy.Step{
 			"publish-test": {Timeout: "1h", CreateImages: &daisy.CreateImages{
@@ -515,15 +580,16 @@ func TestPopulateWorkflow(t *testing.T) {
 					{
 						ImageBase: daisy.ImageBase{Resource: daisy.Resource{Project: "foo-project", NoCleanup: true, RealName: "test-pv"}},
 						Image: computeAlpha.Image{
-							Name: "test-pv",
-							Family: "test-family",
-							SourceImage: "projects/foo-project/global/images/test-sv",
+							Name:            "test-pv",
+							Family:          "test-family",
+							SourceImage:     "projects/foo-project/global/images/test-sv",
+							RolloutOverride: &wantrp,
 						},
 					},
 				},
 			}},
 			"deprecate-test": {DeprecateImages: &daisy.DeprecateImages{
-				{Project: "foo-project", Image: "test-old", DeprecationStatusAlpha: computeAlpha.DeprecationStatus{State: "DEPRECATED", Replacement: "https://www.googleapis.com/compute/v1/projects/foo-project/global/images/test-pv"}}},
+				{Project: "foo-project", Image: "test-old", DeprecationStatusAlpha: computeAlpha.DeprecationStatus{State: "DEPRECATED", Replacement: "https://www.googleapis.com/compute/v1/projects/foo-project/global/images/test-pv", StateOverride: &wantrp}}},
 			},
 		},
 		Dependencies: map[string][]string{
@@ -601,13 +667,13 @@ func TestDeprecatePrintOut(t *testing.T) {
 	}{
 		{"empty", nil, nil, nil, nil},
 		{"unknown state", &daisy.DeprecateImages{&daisy.DeprecateImage{Image: "foo", DeprecationStatusAlpha: computeAlpha.DeprecationStatus{State: "foo"}}}, nil, nil, nil},
-		{"only DEPRECATED", &daisy.DeprecateImages{&daisy.DeprecateImage{Image: "foo", DeprecationStatusAlpha: computeAlpha.DeprecationStatus{State: "DEPRECATED"}}}, []string{"foo"}, nil, nil},
+		{"only DEPRECATED", &daisy.DeprecateImages{&daisy.DeprecateImage{Image: "foo", DeprecationStatusAlpha: computeAlpha.DeprecationStatus{State: "DEPRECATED", StateOverride: &computeAlpha.RolloutPolicy{DefaultRolloutTime: time.Now().Format(time.RFC3339)}}}}, []string{"foo"}, nil, nil},
 		{"only OBSOLETE", &daisy.DeprecateImages{&daisy.DeprecateImage{Image: "foo", DeprecationStatusAlpha: computeAlpha.DeprecationStatus{State: "OBSOLETE"}}}, nil, []string{"foo"}, nil},
-		{"only un-deprecated", &daisy.DeprecateImages{&daisy.DeprecateImage{Image: "foo", DeprecationStatusAlpha: computeAlpha.DeprecationStatus{State: ""}}}, nil, nil, []string{"foo"}},
+		{"only un-deprecated", &daisy.DeprecateImages{&daisy.DeprecateImage{Image: "foo", DeprecationStatusAlpha: computeAlpha.DeprecationStatus{State: "ACTIVE"}}}, nil, nil, []string{"foo"}},
 		{"all three", &daisy.DeprecateImages{
 			&daisy.DeprecateImage{Image: "foo", DeprecationStatusAlpha: computeAlpha.DeprecationStatus{State: "DEPRECATED"}},
 			&daisy.DeprecateImage{Image: "bar", DeprecationStatusAlpha: computeAlpha.DeprecationStatus{State: "OBSOLETE"}},
-			&daisy.DeprecateImage{Image: "baz", DeprecationStatusAlpha: computeAlpha.DeprecationStatus{State: ""}}},
+			&daisy.DeprecateImage{Image: "baz", DeprecationStatusAlpha: computeAlpha.DeprecationStatus{State: "ACTIVE"}}},
 			[]string{"foo"}, []string{"bar"}, []string{"baz"},
 		},
 	}
@@ -616,70 +682,77 @@ func TestDeprecatePrintOut(t *testing.T) {
 			p := &Publish{}
 			p.deprecatePrintOut(tt.args)
 			if !reflect.DeepEqual(p.toDeprecate, tt.toDeprecate) {
-				t.Errorf("deprecatePrintOut() got = %v, want %v", p.toDeprecate, tt.toDeprecate)
+				t.Errorf("deprecatePrintOut() toDeprecate got = %v, want %v", p.toDeprecate, tt.toDeprecate)
 			}
 			if !reflect.DeepEqual(p.toObsolete, tt.toObsolete) {
-				t.Errorf("deprecatePrintOut() got1 = %v, want %v", p.toObsolete, tt.toObsolete)
+				t.Errorf("deprecatePrintOut() toObsolete got = %v, want %v", p.toObsolete, tt.toObsolete)
 			}
 			if !reflect.DeepEqual(p.toUndeprecate, tt.toUndeprecate) {
-				t.Errorf("deprecatePrintOut() got2 = %v, want %v", p.toUndeprecate, tt.toUndeprecate)
+				t.Errorf("deprecatePrintOut() toUndeprecate got = %v, want %v", p.toUndeprecate, tt.toUndeprecate)
 			}
 		})
 	}
 }
 
 func TestCreateRollOut(t *testing.T) {
-	startTime := time.Now()
+	startTime := time.Now().Round(time.Second)
 	tests := []struct {
-		desc string
-		zones []*compute.Zone
+		desc             string
+		zones            []*compute.Zone
 		rolloutStartTime time.Time
-		rolloutRate int
-		wantZones []string
+		rolloutRate      int
+		wantRollout      computeAlpha.RolloutPolicy
 	}{
 		{
-			desc: "1 regions, 3 zones with a rollout rate of 5 minutes.",
+			desc: "3 regions, each region has a different number of zones.",
 			zones: []*compute.Zone{
-				&compute.Zone{
-					Name:                  "us-central2-a",
-					Region:                "https://www.googleapis.com/compute/v1/projects/projectname/regions/us-central2",
+				{
+					Name:   "us-central1-a",
+					Region: "https://www.googleapis.com/compute/v1/projects/projectname/regions/us-central1",
 				},
-				&compute.Zone{
-					Name:                  "us-central2-b",
-					Region:                "https://www.googleapis.com/compute/v1/projects/projectname/regions/us-central2",
+				{
+					Name:   "us-central1-b",
+					Region: "https://www.googleapis.com/compute/v1/projects/projectname/regions/us-central1",
 				},
-				&compute.Zone{
-					Name:                  "us-central2-c",
-					Region:                "https://www.googleapis.com/compute/v1/projects/projectname/regions/us-central2",
+				{
+					Name:   "us-central2-a",
+					Region: "https://www.googleapis.com/compute/v1/projects/projectname/regions/us-central2",
+				},
+				{
+					Name:   "us-central2-b",
+					Region: "https://www.googleapis.com/compute/v1/projects/projectname/regions/us-central2",
+				},
+				{
+					Name:   "us-central2-c",
+					Region: "https://www.googleapis.com/compute/v1/projects/projectname/regions/us-central2",
+				},
+				{
+					Name:   "us-central3-a",
+					Region: "https://www.googleapis.com/compute/v1/projects/projectname/regions/us-central2",
 				},
 			},
-			rolloutStartTime:  startTime,
-			rolloutRate:       5,
-			wantZones: []string{"zones/us-central2-a","zones/us-central2-b","zones/us-central2-c"},
+			rolloutStartTime: startTime,
+			rolloutRate:      5,
+			wantRollout: computeAlpha.RolloutPolicy{
+				DefaultRolloutTime: startTime.Format(time.RFC3339),
+				LocationRolloutPolicies: map[string]string{
+					"us-central1-a": startTime.Format(time.RFC3339),
+					"us-central2-a": startTime.Add(5 * time.Minute).Format(time.RFC3339),
+					"us-central3-a": startTime.Add(10 * time.Minute).Format(time.RFC3339),
+					"us-central1-b": startTime.Add(15 * time.Minute).Format(time.RFC3339),
+					"us-central2-b": startTime.Add(20 * time.Minute).Format(time.RFC3339),
+					"us-central2-c": startTime.Add(25 * time.Minute).Format(time.RFC3339),
+				},
+			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
-			rollout := createRollOut(tt.zones,tt.rolloutStartTime, tt.rolloutRate)
+			rollout := createRollOut(tt.zones, tt.rolloutStartTime, tt.rolloutRate)
 
-			if rollout.DefaultRolloutTime != tt.rolloutStartTime.Format(time.RFC3339) {
-				t.Errorf("createRollOut() DefaultRolloutTime got = %v, want %v", rollout.DefaultRolloutTime, tt.rolloutStartTime.Format(time.RFC3339))
+			if reflect.DeepEqual(rollout, tt.wantRollout) {
+				t.Errorf("unexpected rollout got = %s, want = %s", rollout, tt.wantRollout)
 			}
-
-			//Verify interval
-			intervalCounter := 0
-			for k, v := range rollout.LocationRolloutPolicies {
-				intervalCounter++
-				numMinutes := intervalCounter * tt.rolloutRate
-				parsedTime, err := time.Parse(time.RFC3339, v)
-				if err != nil {
-					t.Errorf("failed to parse time, got = %v, err = %v", v, err)
-				}
-				if parsedTime != tt.rolloutStartTime.Add(time.Minute * numMinutes) {
-
-				}
-			}
-
 		})
 	}
 }

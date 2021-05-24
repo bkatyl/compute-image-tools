@@ -79,6 +79,8 @@ type Publish struct {
 	toObsolete    []string
 	toUndeprecate []string
 
+	rolloutPolicy []string
+
 	imagesCache map[string][]*computeAlpha.Image
 }
 
@@ -240,6 +242,11 @@ func (p *Publish) CreateWorkflows(ctx context.Context, varMap map[string]string,
 		printList(p.toDelete)
 	}
 
+	if len(p.rolloutPolicy) > 0 {
+		fmt.Println("  All images will have the following rollout policy:")
+		printList(p.rolloutPolicy)
+	}
+
 	return ws, nil
 }
 
@@ -277,7 +284,7 @@ func publishImage(p *Publish, img *Image, pubImgs []*computeAlpha.Image, skipDup
 			Family:                       img.Family,
 			Deprecated:                   ds,
 			ShieldedInstanceInitialState: img.ShieldedInstanceInitialState,
-			RolloutOverride: img.RolloutPolicy,
+			RolloutOverride:              img.RolloutPolicy,
 		},
 		ImageBase: daisy.ImageBase{
 			Resource: daisy.Resource{
@@ -352,8 +359,8 @@ func publishImage(p *Publish, img *Image, pubImgs []*computeAlpha.Image, skipDup
 				Image:   pubImg.Name,
 				Project: p.PublishProject,
 				DeprecationStatusAlpha: computeAlpha.DeprecationStatus{
-					State:       "DEPRECATED",
-					Replacement: fmt.Sprintf(fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/global/images/%s", p.PublishProject, publishName)),
+					State:         "DEPRECATED",
+					Replacement:   fmt.Sprintf(fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/global/images/%s", p.PublishProject, publishName)),
 					StateOverride: img.RolloutPolicy,
 				},
 			})
@@ -391,6 +398,10 @@ func rollbackImage(p *Publish, img *Image, pubImgs []*computeAlpha.Image) (*dais
 			*dis = append(*dis, &daisy.DeprecateImage{
 				Image:   pubImg.Name,
 				Project: p.PublishProject,
+				DeprecationStatusAlpha: computeAlpha.DeprecationStatus{
+					State:         "ACTIVE",
+					StateOverride: img.RolloutPolicy,
+				},
 			})
 			break
 		}
@@ -457,7 +468,7 @@ func (p *Publish) createPrintOut(createImages *daisy.CreateImages) {
 	if createImages == nil {
 		return
 	}
-	for _, ci := range createImages.Images {
+	for _, ci := range createImages.ImagesAlpha {
 		p.toCreate = append(p.toCreate, fmt.Sprintf("%s: (%s)", ci.Name, ci.Description))
 	}
 	return
@@ -480,14 +491,27 @@ func (p *Publish) deprecatePrintOut(deprecateImages *daisy.DeprecateImages) {
 
 	for _, di := range *deprecateImages {
 		image := path.Base(di.Image)
-		switch di.DeprecationStatus.State {
+		switch di.DeprecationStatusAlpha.State {
 		case "DEPRECATED":
 			p.toDeprecate = append(p.toDeprecate, image)
 		case "OBSOLETE":
 			p.toObsolete = append(p.toObsolete, image)
-		case "":
+		case "ACTIVE", "":
 			p.toUndeprecate = append(p.toUndeprecate, image)
 		}
+	}
+}
+
+func (p *Publish) rolloutPolicyPrintOut(rp *computeAlpha.RolloutPolicy) {
+	p.rolloutPolicy = append(p.rolloutPolicy, fmt.Sprintf("Default rollout time: %s", rp.DefaultRolloutTime))
+	var zones []string
+	for k := range rp.LocationRolloutPolicies {
+		zones = append(zones, k)
+	}
+	sort.Strings(zones)
+
+	for _, v := range zones {
+		p.rolloutPolicy = append(p.rolloutPolicy, fmt.Sprintf("Zone %s at %s", v[6:], rp.LocationRolloutPolicies[v]))
 	}
 }
 
@@ -513,6 +537,7 @@ func (p *Publish) populateWorkflow(ctx context.Context, w *daisy.Workflow, pubIm
 	p.createPrintOut(createImages)
 	p.deletePrintOut(deleteResources)
 	p.deprecatePrintOut(deprecateImages)
+	p.rolloutPolicyPrintOut(img.RolloutPolicy)
 
 	return nil
 }
@@ -604,28 +629,33 @@ func createRollOut(zones []*compute.Zone, rolloutStartTime time.Time, rolloutRat
 	rp := computeAlpha.RolloutPolicy{}
 	rp.DefaultRolloutTime = rolloutStartTime.Format(time.RFC3339)
 
-	var zoneMap map[string][]string
-	zoneMap = make(map[string][]string)
+	var regions map[string][]string
+	regions = make(map[string][]string)
 	maxRegionLength := 0
 
+	// Build a map of all the regions and determine the max number of zones in a region.
 	for _, z := range zones {
-		zoneMap[z.Region] = append(zoneMap[z.Region], z.Name)
-		if len(zoneMap[z.Region]) > maxRegionLength {
-			maxRegionLength = len(zoneMap[z.Region])
+		regions[z.Region] = append(regions[z.Region], z.Name)
+		if len(regions[z.Region]) > maxRegionLength {
+			maxRegionLength = len(regions[z.Region])
 		}
 	}
 
-	for _, value := range zoneMap {
+	// Order the list of zones in each region.
+	for _, value := range regions {
 		sort.Strings(value)
 	}
+
+	// zoneList is the ordered list of zones to apply the rollout policy to.
 	var zoneList []string
 
-	// Iterate through each region for the max number of zones in any region
-	for i := 0; i < maxRegionLength; i++ {
-		for _, value := range zoneMap {
-			// If this region has any zones, add the first zone to the zoneList and remove it from the list.
-			if i < len(value) {
-				zoneList = append(zoneList, value[i])
+	// zoneList's order should be the first zone from each region, then second zone from each region, third zone from each region, etc.
+	// us-central1-a, us-central2-b, us-central3-c, us-central1-a, us-central2-b, us-central3-c
+	for zoneCount := 0; zoneCount < maxRegionLength; zoneCount++ {
+		for _, value := range regions {
+			// If the region has a zone at the current zoneCount, add that zone to the zoneList.
+			if zoneCount < len(value) {
+				zoneList = append(zoneList, value[zoneCount])
 			}
 		}
 	}
@@ -634,7 +664,7 @@ func createRollOut(zones []*compute.Zone, rolloutStartTime time.Time, rolloutRat
 	rolloutPolicy = make(map[string]string)
 
 	for i, zone := range zoneList {
-		rolloutPolicy[fmt.Sprintf("zones/%s",zone)] = rolloutStartTime.Add(time.Duration(rolloutRate * i)*time.Minute).Format(time.RFC3339)
+		rolloutPolicy[fmt.Sprintf("zones/%s", zone)] = rolloutStartTime.Add(time.Duration(rolloutRate*i) * time.Minute).Format(time.RFC3339)
 	}
 	rp.LocationRolloutPolicies = rolloutPolicy
 	return &rp
