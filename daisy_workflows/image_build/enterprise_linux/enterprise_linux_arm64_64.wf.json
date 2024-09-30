@@ -55,13 +55,27 @@
           "Name": "disk-installer",
           "SizeGb": "50",
           "Type": "hyperdisk-balanced",
-          "GuestOsFeatures": [{"type": "UEFI_COMPATIBLE"}, {"type": "GVNIC"}]
+          "GuestOsFeatures": [
+            {
+              "type": "UEFI_COMPATIBLE"
+            },
+            {
+              "type": "GVNIC"
+            }
+          ]
         },
         {
           "Name": "el-install-disk",
           "SizeGb": "20",
           "Type": "hyperdisk-balanced",
-          "GuestOsFeatures": [{"type": "UEFI_COMPATIBLE"}, {"type": "GVNIC"}]
+          "GuestOsFeatures": [
+            {
+              "type": "UEFI_COMPATIBLE"
+            },
+            {
+              "type": "GVNIC"
+            }
+          ]
         }
       ]
     },
@@ -69,7 +83,14 @@
       "CreateInstances": [
         {
           "Name": "inst-installerprep",
-          "Disks": [{"Source": "disk-installerprep"}, {"Source": "disk-installer"}],
+          "Disks": [
+            {
+              "Source": "disk-installerprep"
+            },
+            {
+              "Source": "disk-installer"
+            }
+          ],
           "MachineType": "c3-standard-4",
           "Metadata": {
             "files_gcs_dir": "${SOURCESPATH}/build_files",
@@ -83,7 +104,9 @@
             "rhel_byos": "${rhel_byos}",
             "rhel_sap": "${rhel_sap}"
           },
-          "Scopes": ["https://www.googleapis.com/auth/devstorage.read_write"],
+          "Scopes": [
+            "https://www.googleapis.com/auth/devstorage.read_write"
+          ],
           "StartupScript": "installerprep_startup_script"
         }
       ]
@@ -95,7 +118,9 @@
           "Name": "inst-installerprep",
           "SerialOutput": {
             "Port": 1,
-            "FailureMatch": "BuildFailed:",
+            "FailureMatch": [
+              "BuildFailed:"
+            ],
             "SuccessMatch": "BuildSuccess:",
             "StatusMatch": "BuildStatus:"
           }
@@ -104,34 +129,71 @@
     },
     "cleanup-installer-prep": {
       "DeleteResources": {
-        "Instances": ["inst-installerprep"]
+        "Instances": [
+          "inst-installerprep"
+        ]
       }
     },
     "run-installation": {
       "CreateInstances": [
         {
           "Name": "inst-build",
-          "Disks": [{"Source": "disk-installer"}, {"Source": "el-install-disk"}],
+          "Disks": [
+            {
+              "Source": "disk-installer"
+            },
+            {
+              "Source": "el-install-disk"
+            }
+          ],
           "MachineType": "${machine_type}"
         }
       ]
     },
     "wait-installation": {
       "Timeout": "60m",
-      "WaitForInstancesSignal": [{"Name": "inst-build", "Stopped": true}]
+      "WaitForInstancesSignal": [
+        {
+          "Name": "inst-build",
+          "SerialOutput": {
+            "Port": 1,
+            "FailureMatch": [
+              "BuildFailed:",
+              "Build Failed!"
+            ],
+            "SuccessMatch": "BuildSuccess:",
+            "StatusMatch": "BuildStatus:"
+          },
+          "Stopped": true
+        }
+      ]
     },
     "cleanup-inst-build": {
       "DeleteResources": {
-        "Instances": ["inst-build"]
+        "Instances": [
+          "inst-build"
+        ]
       }
     }
   },
   "Dependencies": {
-    "run-installer-prep": ["setup-disks"],
-    "wait-installer-prep": ["run-installer-prep"],
-    "cleanup-installer-prep": ["wait-installer-prep"],
-    "run-installation": ["cleanup-installer-prep"],
-    "wait-installation": ["run-installation"],
-    "cleanup-inst-build": ["wait-installation"]
+    "run-installer-prep": [
+      "setup-disks"
+    ],
+    "wait-installer-prep": [
+      "run-installer-prep"
+    ],
+    "cleanup-installer-prep": [
+      "wait-installer-prep"
+    ],
+    "run-installation": [
+      "cleanup-installer-prep"
+    ],
+    "wait-installation": [
+      "run-installation"
+    ],
+    "cleanup-inst-build": [
+      "wait-installation"
+    ]
   }
 }
