@@ -22,3 +22,4 @@ go mod tidy
 |--------------------------------------------------------------------|--------------------------------------------------------|
 | `github.com/GoogleCloudPlatform/compute-image-tools/daisy`         | `github.com/GoogleCloudPlatform/compute-daisy`         |
 | `github.com/GoogleCloudPlatform/compute-image-tools/daisy/compute` | `github.com/GoogleCloudPlatform/compute-daisy/compute` |
+
