@@ -75,7 +75,7 @@ it accepted.
 1.  Fork this Git repository and make your changes.
 1.  Create a Pull Request.
 1.  Incorporate review feedback to your changes.
-1.  Accepted.
+1.  Accepted!
 
 ## License
 
